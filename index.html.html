@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Yoklama Sistemi - Gelişmiş</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
+    <!-- SheetJS for Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        #qrcode canvas {
+            margin: 0 auto;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 min-h-screen">
+    
+    <!-- Mod Seçim Ekranı -->
+    <div id="selectScreen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md">
+            <div class="bg-white rounded-3xl shadow-2xl p-8">
+                <h1 class="text-3xl font-bold text-center mb-2 text-gray-800">
+                    QR Yoklama Sistemi
+                </h1>
+                <p class="text-center text-gray-600 mb-8">Gelişmiş Versiyon ☁️</p>
+                
+                <div class="space-y-4">
+                    <button onclick="showTeacherMode()" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
+                        📝 Öğretmen Modu
+                    </button>
+                    
+                    <button onclick="showStudentMode()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
+                        ✅ Öğrenci Modu
+                    </button>
+                </div>
+
+                <div class="mt-8 p-4 bg-blue-50 rounded-xl">
+                    <p class="text-sm text-gray-700">
+                        <strong>📱 Özellikler:</strong><br/>
+                        • Gerçek QR kod okuma<br/>
+                        • GPS konum kontrolü<br/>
+                        • ☁️ Bulut veritabanı<br/>
+                        • 📊 Excel indirme<br/>
+                        • 50 metre sınıf alanı
+                    </p>
+                </div>
+
+                <div class="mt-4 p-3 bg-yellow-50 rounded-xl">
+                    <p class="text-xs text-gray-600">
+                        <strong>💡 İpucu:</strong> Firebase ayarlarını kodda yapılandırın
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Öğretmen Modu Ekranı -->
+    <div id="teacherScreen" class="hidden min-h-screen p-4">
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-white rounded-3xl shadow-2xl p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold text-gray-800">
+                        📝 Öğretmen Paneli
+                    </h1>
+                    <button onclick="showSelectScreen()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+                        ← Geri
+                    </button>
+                </div>
+
+                <div id="teacherLoading" class="text-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+                    <p class="text-gray-600">QR kod oluşturuluyor...</p>
+                </div>
+
+                <div id="teacherContent" class="hidden">
+                    <!-- Ders Bilgisi -->
+                    <div class="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-2xl mb-4">
+                        <label class="block text-gray-700 font-semibold mb-2">
+                            Ders Adı
+                        </label>
+                        <input
+                            type="text"
+                            id="courseName"
+                            placeholder="Örn: Matematik 101"
+                            class="w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
+                        />
+                    </div>
+
+                    <div class="bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-2xl mb-6">
+                        <h2 class="text-xl font-bold text-center mb-4 text-gray-800">
+                            Yoklama QR Kodu
+                        </h2>
+                        <div id="qrcode" class="bg-white p-6 rounded-xl shadow-lg"></div>
+                        <p class="text-center mt-4 text-sm text-gray-600">
+                            Öğrenciler bu kodu okutarak yoklama verebilir
+                        </p>
+                        <button onclick="generateNewQR()" class="w-full mt-4 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700">
+                            🔄 Yeni QR Oluştur
+                        </button>
+                    </div>
+
+                    <div class="bg-blue-50 p-4 rounded-xl mb-6">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">📍</span>
+                            <span class="font-semibold text-gray-800">Sınıf Konumu:</span>
+                        </div>
+                        <p class="text-sm text-gray-700" id="teacherLocation">
+                            Konum alınıyor...
+                        </p>
+                        <div class="mt-2">
+                            <span id="connectionStatus" class="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
+                                🔌 Bağlantı durumu kontrol ediliyor...
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="bg-green-50 p-4 rounded-xl">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <span class="text-2xl">👥</span>
+                                <span class="font-bold text-gray-800">Yoklama Listesi</span>
+                            </div>
+                            <span id="attendanceCount" class="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                                0
+                            </span>
+                        </div>
+                        
+                        <div id="attendanceList" class="space-y-2 max-h-96 overflow-y-auto">
+                            <p class="text-center text-gray-500 py-4">
+                                Henüz yoklama yok
+                            </p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3 mt-4">
+                            <button onclick="downloadExcel()" class="bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2">
+                                <span>📊</span> Excel İndir
+                            </button>
+                            <button onclick="downloadCSV()" class="bg-teal-600 text-white py-2 rounded-lg hover:bg-teal-700 flex items-center justify-center gap-2">
+                                <span>📄</span> CSV İndir
+                            </button>
+                        </div>
+
+                        <button onclick="clearAttendance()" class="w-full mt-3 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600">
+                            🗑️ Listeyi Temizle
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Öğrenci Modu Ekranı -->
+    <div id="studentScreen" class="hidden min-h-screen p-4">
+        <div class="max-w-md mx-auto">
+            <div class="bg-white rounded-3xl shadow-2xl p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h1 class="text-2xl font-bold text-gray-800">
+                        ✅ Öğrenci Paneli
+                    </h1>
+                    <button onclick="showSelectScreen()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+                        ← Geri
+                    </button>
+                </div>
+
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">
+                            Adınız Soyadınız
+                        </label>
+                        <input
+                            type="text"
+                            id="studentName"
+                            placeholder="Örn: Ahmet Yılmaz"
+                            class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none"
+                        />
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-semibold mb-2">
+                            Öğrenci Numarası (Opsiyonel)
+                        </label>
+                        <input
+                            type="text"
+                            id="studentNumber"
+                            placeholder="Örn: 20240001"
+                            class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none"
+                        />
+                    </div>
+
+                    <button onclick="startQRScanner()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-xl transform hover:scale-105 transition-all">
+                        📷 QR Kod Okut
+                    </button>
+                </div>
+
+                <!-- Kamera Görüntüsü -->
+                <div id="scannerContainer" class="hidden mb-6">
+                    <div class="relative bg-black rounded-xl overflow-hidden">
+                        <video id="video" class="w-full" autoplay playsinline></video>
+                        <canvas id="canvas" class="hidden"></canvas>
+                        <div class="absolute inset-0 border-4 border-green-400 pointer-events-none"></div>
+                        <div class="absolute top-4 left-4 right-4 bg-green-500/80 text-white px-4 py-2 rounded-lg text-center font-bold">
+                            QR kodu kamera ile tarayın
+                        </div>
+                    </div>
+                    <button onclick="stopQRScanner()" class="w-full mt-4 bg-red-500 text-white py-2 rounded-lg hover:bg-red-600">
+                        ❌ İptal
+                    </button>
+                </div>
+
+                <!-- Sonuç Mesajı -->
+                <div id="scanResult" class="hidden"></div>
+
+                <div class="mt-6 p-4 bg-blue-50 rounded-xl">
+                    <p class="text-sm text-gray-700">
+                        <strong>ℹ️ Bilgi:</strong><br/>
+                        • Adınızı girip QR kodu okutun<br/>
+                        • Sınıfın 50m içinde olmalısınız<br/>
+                        • Yoklamanız otomatik kaydedilir
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase yapılandırması
+        const firebaseConfig = {
+            apiKey: "BURAYA-FIREBASE-API-KEY-GELECEK",
+            authDomain: "BURAYA-AUTH-DOMAIN-GELECEK",
+            databaseURL: "BURAYA-DATABASE-URL-GELECEK",
+            projectId: "BURAYA-PROJECT-ID-GELECEK",
+            storageBucket: "BURAYA-STORAGE-BUCKET-GELECEK",
+            messagingSenderId: "BURAYA-SENDER-ID-GELECEK",
+            appId: "BURAYA-APP-ID-GELECEK"
+        };
+
+        // Firebase başlatma
+        let database;
+        let useFirebase = false;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            useFirebase = true;
+            updateConnectionStatus('✅ Bulut bağlantısı aktif');
+        } catch (error) {
+            console.log('Firebase bağlantısı kurulamadı, localStorage kullanılacak');
+            useFirebase = false;
+            updateConnectionStatus('⚠️ Yerel depolama kullanılıyor');
+        }
+
+        function updateConnectionStatus(message) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (statusEl) {
+                statusEl.textContent = message;
+                if (message.includes('✅')) {
+                    statusEl.className = 'text-xs bg-green-200 text-green-800 px-2 py-1 rounded';
+                } else if (message.includes('⚠️')) {
+                    statusEl.className = 'text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded';
+                } else {
+                    statusEl.className = 'text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded';
+                }
+            }
+        }
+
+        let currentQRData = null;
+        let videoStream = null;
+        let scanInterval = null;
+        let currentSessionId = null;
+
+        // Ekran geçişleri
+        function showSelectScreen() {
+            document.getElementById('selectScreen').classList.remove('hidden');
+            document.getElementById('teacherScreen').classList.add('hidden');
+            document.getElementById('studentScreen').classList.add('hidden');
+            stopQRScanner();
+        }
+
+        function showTeacherMode() {
+            document.getElementById('selectScreen').classList.add('hidden');
+            document.getElementById('teacherScreen').classList.remove('hidden');
+            document.getElementById('teacherLoading').classList.remove('hidden');
+            document.getElementById('teacherContent').classList.add('hidden');
+            
+            setTimeout(() => {
+                initTeacherMode();
+            }, 500);
+        }
+
+        function showStudentMode() {
+            document.getElementById('selectScreen').classList.add('hidden');
+            document.getElementById('studentScreen').classList.remove('hidden');
+        }
+
+        // Öğretmen modu başlatma
+        function initTeacherMode() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const location = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        
+                        document.getElementById('teacherLocation').textContent = 
+                            `Enlem: ${location.lat.toFixed(6)}, Boylam: ${location.lng.toFixed(6)}`;
+                        
+                        generateQRCode(location);
+                        loadAttendanceList();
+                        
+                        document.getElementById('teacherLoading').classList.add('hidden');
+                        document.getElementById('teacherContent').classList.remove('hidden');
+
+                        // Firebase gerçek zamanlı dinleme
+                        if (useFirebase && currentSessionId) {
+                            listenToFirebaseUpdates();
+                        }
+                    },
+                    (error) => {
+                        alert('Konum alınamadı! Lütfen konum izni verin.');
+                    }
+                );
+            }
+        }
+
+        // Firebase gerçek zamanlı dinleme
+        function listenToFirebaseUpdates() {
+            if (!useFirebase || !currentSessionId) return;
+
+            const sessionRef = database.ref('sessions/' + currentSessionId + '/attendances');
+            sessionRef.on('value', (snapshot) => {
+                loadAttendanceList();
+            });
+        }
+
+        // QR kod oluşturma
+        function generateQRCode(location) {
+            currentSessionId = 'session_' + Date.now();
+            
+            const qrData = {
+                type: 'attendance',
+                sessionId: currentSessionId,
+                location: location,
+                radius: 50,
+                timestamp: new Date().toISOString()
+            };
+            
+            currentQRData = qrData;
+            
+            const qrcodeDiv = document.getElementById('qrcode');
+            qrcodeDiv.innerHTML = '';
+            
+            new QRCode(qrcodeDiv, {
+                text: JSON.stringify(qrData),
+                width: 256,
+                height: 256,
+                colorDark: '#000000',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+
+            // Firebase'e session kaydet
+            if (useFirebase) {
+                database.ref('sessions/' + currentSessionId).set({
+                    createdAt: firebase.database.ServerValue.TIMESTAMP,
+                    location: location,
+                    courseName: document.getElementById('courseName')?.value || 'Belirtilmemiş'
+                });
+            }
+        }
+
+        // Yeni QR oluştur
+        function generateNewQR() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const location = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        };
+                        generateQRCode(location);
+                    }
+                );
+            }
+        }
+
+        // Mesafe hesaplama (Haversine formülü)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c;
+        }
+
+        // QR tarayıcı başlatma
+        async function startQRScanner() {
+            const studentName = document.getElementById('studentName').value.trim();
+            
+            if (!studentName) {
+                alert('Lütfen adınızı soyadınızı girin!');
+                return;
+            }
+            
+            document.getElementById('scannerContainer').classList.remove('hidden');
+            document.getElementById('scanResult').classList.add('hidden');
+            
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                });
+                
+                const video = document.getElementById('video');
+                video.srcObject = videoStream;
+                video.play();
+                
+                scanInterval = setInterval(scanQRCode, 300);
+            } catch (err) {
+                alert('Kamera erişimi reddedildi!');
+                stopQRScanner();
+            }
+        }
+
+        // QR kod tarama
+        function scanQRCode() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    processQRCode(code.data);
+                }
+            }
+        }
+
+        // QR kod işleme
+        function processQRCode(qrData) {
+            stopQRScanner();
+            
+            try {
+                const qrContent = JSON.parse(qrData);
+                const studentName = document.getElementById('studentName').value.trim();
+                const studentNumber = document.getElementById('studentNumber').value.trim();
+                
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const studentLoc = {
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            };
+                            
+                            const distance = calculateDistance(
+                                studentLoc.lat,
+                                studentLoc.lng,
+                                qrContent.location.lat,
+                                qrContent.location.lng
+                            );
+                            
+                            if (distance <= qrContent.radius) {
+                                const attendance = {
+                                    name: studentName,
+                                    studentNumber: studentNumber || 'Belirtilmemiş',
+                                    time: new Date().toLocaleString('tr-TR'),
+                                    timestamp: Date.now(),
+                                    distance: distance.toFixed(0),
+                                    sessionId: qrContent.sessionId,
+                                    location: studentLoc
+                                };
+                                
+                                saveAttendance(attendance);
+                                showResult(true, distance.toFixed(0));
+                            } else {
+                                showResult(false, distance.toFixed(0));
+                            }
+                        },
+                        (error) => {
+                            alert('Konum erişimi reddedildi!');
+                        }
+                    );
+                }
+            } catch (err) {
+                alert('Geçersiz QR kod!');
+            }
+        }
+
+        // Sonuç gösterme
+        function showResult(success, distance) {
+            const resultDiv = document.getElementById('scanResult');
+            resultDiv.classList.remove('hidden');
+            
+            if (success) {
+                resultDiv.innerHTML = `
+                    <div class="p-4 rounded-xl mb-4 bg-green-50 border-2 border-green-500">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">✅</span>
+                            <div>
+                                <p class="font-bold text-green-800">Yoklama Başarılı!</p>
+                                <p class="text-sm text-green-700">Mesafe: ${distance} metre</p>
+                                <p class="text-xs text-green-600 mt-1">Kaydınız buluta yüklendi</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.getElementById('studentName').value = '';
+                document.getElementById('studentNumber').value = '';
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="p-4 rounded-xl mb-4 bg-red-50 border-2 border-red-500">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">❌</span>
+                            <div>
+                                <p class="font-bold text-red-800">Yoklama Başarısız!</p>
+                                <p class="text-sm text-red-700">Sınıf dışındasınız!<br/>Mesafe: ${distance} metre (Max: 50m)</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // QR tarayıcı durdurma
+        function stopQRScanner() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            document.getElementById('scannerContainer').classList.add('hidden');
+        }
+
+        // Yoklama kaydetme
+        function saveAttendance(attendance) {
+            if (useFirebase) {
+                // Firebase'e kaydet
+                const attendanceRef = database.ref('sessions/' + attendance.sessionId + '/attendances');
+                attendanceRef.push(attendance);
+            } else {
+                // LocalStorage'a kaydet
+                let list = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                list.push(attendance);
+                localStorage.setItem('attendanceList', JSON.stringify(list));
+            }
+            loadAttendanceList();
+        }
+
+        // Yoklama listesi yükleme
+        function loadAttendanceList() {
+            if (useFirebase && currentSessionId) {
+                // Firebase'den yükle
+                database.ref('sessions/' + currentSessionId + '/attendances').once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    let list = [];
+                    if (data) {
+                        list = Object.values(data);
+                    }
+                    displayAttendanceList(list);
+                });
+            } else {
+                // LocalStorage'dan yükle
+                const list = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                displayAttendanceList(list);
+            }
+        }
+
+        // Yoklama listesini göster
+        function displayAttendanceList(list) {
+            const container = document.getElementById('attendanceList');
+            const count = document.getElementById('attendanceCount');
+            
+            if (!container || !count) return;
+            
+            count.textContent = list.length;
+            
+            if (list.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-4">Henüz yoklama yok</p>';
+            } else {
+                // Zamana göre sırala (en yeni önce)
+                list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                
+                container.innerHTML = list.map((student, idx) => `
+                    <div class="bg-white p-3 rounded-lg shadow flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xl">✅</span>
+                            <div>
+                                <p class="font-semibold text-gray-800">${student.name}</p>
+                                <p class="text-xs text-gray-600">${student.studentNumber}</p>
+                                <p class="text-xs text-gray-500">${student.time}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                            ${student.distance}m
+                        </span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Excel indirme
+        function downloadExcel() {
+            getAttendanceData((list) => {
+                if (list.length === 0) {
+                    alert('İndirilecek veri yok!');
+                    return;
+                }
+
+                const courseName = document.getElementById('courseName')?.value || 'Yoklama';
+                const date = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
+                
+                // Excel için veriyi hazırla
+                const excelData = list.map((student, idx) => ({
+                    'Sıra': idx + 1,
+                    'Ad Soyad': student.name,
+                    'Öğrenci No': student.studentNumber || '-',
+                    'Tarih/Saat': student.time,
+                    'Mesafe (m)': student.distance,
+                    'Enlem': student.location?.lat?.toFixed(6) || '-',
+                    'Boylam': student.location?.lng?.toFixed(6) || '-'
+                }));
+
+                // Excel dosyası oluştur
+                const ws = XLSX.utils.json_to_sheet(excelData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Yoklama');
+
+                // Sütun genişliklerini ayarla
+                ws['!cols'] = [
+                    { wch: 6 },  // Sıra
+                    { wch: 25 }, // Ad Soyad
+                    { wch: 15 }, // Öğrenci No
+                    { wch: 20 }, // Tarih/Saat
+                    { wch: 12 }, // Mesafe
+                    { wch: 12 }, // Enlem
+                    { wch: 12 }  // Boylam
+                ];
+
+                // İndir
+                XLSX.writeFile(wb, `${courseName}_Yoklama_${date}.xlsx`);
+            });
+        }
+
+        // CSV indirme
+        function downloadCSV() {
+            getAttendanceData((list) => {
+                if (list.length === 0) {
+                    alert('İndirilecek veri yok!');
+                    return;
+                }
+
+                const courseName = document.getElementById('courseName')?.value || 'Yoklama';
+                const date = new Date().toLocaleDateString('tr-TR').replace(/\./g, '-');
+
+                // CSV başlıkları
+                let csv = 'Sıra,Ad Soyad,Öğrenci No,Tarih/Saat,Mesafe (m),Enlem,Boylam\n';
+
+                // Verileri ekle
+                list.forEach((student, idx) => {
+                    csv += `${idx + 1},"${student.name}","${student.studentNumber || '-'}","${student.time}",${student.distance},${student.location?.lat?.toFixed(6) || '-'},${student.location?.lng?.toFixed(6) || '-'}\n`;
+                });
+
+                // Dosyayı indir
+                const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${courseName}_Yoklama_${date}.csv`;
+                link.click();
+            });
+        }
+
+        // Veri alma yardımcı fonksiyonu
+        function getAttendanceData(callback) {
+            if (useFirebase && currentSessionId) {
+                database.ref('sessions/' + currentSessionId + '/attendances').once('value', (snapshot) => {
+                    const data = snapshot.val();
+                    let list = [];
+                    if (data) {
+                        list = Object.values(data);
+                    }
+                    callback(list);
+                });
+            } else {
+                const list = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                callback(list);
+            }
+        }
+
+        // Listeyi temizle
+        function clearAttendance() {
+            if (confirm('Yoklama listesini temizlemek istediğinizden emin misiniz?')) {
+                if (useFirebase && currentSessionId) {
+                    database.ref('sessions/' + currentSessionId + '/attendances').remove();
+                } else {
+                    localStorage.removeItem('attendanceList');
+                }
+                loadAttendanceList();
+            }
+        }
+    </script>
+</body>
+</html>

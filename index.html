@@ -153,13 +153,19 @@
                     </div>
 
                     <div class="bg-blue-50 p-4 rounded-xl mb-6">
-                        <div class="flex items-center gap-2 mb-2">
-                            <span class="text-2xl">📍</span>
-                            <span class="font-semibold text-gray-800">Sınıf Konumu:</span>
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-2xl">📍</span>
+                                <span class="font-semibold text-gray-800">Sınıf Konumu:</span>
+                            </div>
+                            <button onclick="updateLocation()" class="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-1">
+                                🔄 Konumu Güncelle
+                            </button>
                         </div>
                         <p class="text-sm text-gray-700" id="teacherLocation">
                             Konum alınıyor...
                         </p>
+                        <p class="text-xs text-gray-500 mt-1" id="locationTime"></p>
                         <div class="mt-2">
                             <span id="connectionStatus" class="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded">
                                 🔌 Bağlantı durumu kontrol ediliyor...
@@ -408,33 +414,155 @@
 
         // Öğretmen modu başlatma
         function initTeacherMode() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const location = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        
-                        document.getElementById('teacherLocation').textContent = 
-                            `Enlem: ${location.lat.toFixed(6)}, Boylam: ${location.lng.toFixed(6)}`;
-                        
-                        generateQRCode(location);
-                        loadAttendanceList();
-                        
-                        document.getElementById('teacherLoading').classList.add('hidden');
-                        document.getElementById('teacherContent').classList.remove('hidden');
+            getLocationAndInitialize();
+        }
 
-                        // Firebase gerçek zamanlı dinleme
-                        if (useFirebase && currentSessionId) {
-                            listenToFirebaseUpdates();
-                        }
-                    },
-                    (error) => {
-                        alert('Konum alınamadı! Lütfen konum izni verin.');
-                    }
-                );
+        // Konum al ve başlat
+        function getLocationAndInitialize() {
+            if (!navigator.geolocation) {
+                showLocationError('Tarayıcınız konum özelliğini desteklemiyor!');
+                return;
             }
+
+            document.getElementById('teacherLocation').innerHTML = '<span class="text-blue-600">📍 Konum alınıyor...</span>';
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    
+                    updateLocationDisplay(location);
+                    generateQRCode(location);
+                    loadAttendanceList();
+                    
+                    document.getElementById('teacherLoading').classList.add('hidden');
+                    document.getElementById('teacherContent').classList.remove('hidden');
+
+                    // Firebase gerçek zamanlı dinleme
+                    if (useFirebase && currentSessionId) {
+                        listenToFirebaseUpdates();
+                    }
+                },
+                (error) => {
+                    let errorMessage = 'Konum alınamadı! ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += 'Konum izni verilmedi. Lütfen tarayıcı ayarlarından konum iznini açın.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += 'Konum bilgisi kullanılamıyor.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += 'Konum alma zaman aşımına uğradı.';
+                            break;
+                        default:
+                            errorMessage += 'Bilinmeyen bir hata oluştu.';
+                    }
+                    showLocationError(errorMessage);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // Konum güncelle butonu
+        function updateLocation() {
+            document.getElementById('teacherLocation').innerHTML = '<span class="text-blue-600 animate-pulse">🔄 Konum güncelleniyor...</span>';
+            
+            if (!navigator.geolocation) {
+                showLocationError('Tarayıcınız konum özelliğini desteklemiyor!');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    
+                    updateLocationDisplay(location);
+                    generateQRCode(location);
+                    
+                    // Başarı bildirimi
+                    showNotification('✅ Konum güncellendi! Yeni QR kod oluşturuldu.', 'success');
+                },
+                (error) => {
+                    let errorMessage = 'Konum güncellenemedi! ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += 'Konum izni verilmedi.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += 'Konum bilgisi kullanılamıyor.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += 'Zaman aşımı.';
+                            break;
+                        default:
+                            errorMessage += 'Bilinmeyen hata.';
+                    }
+                    showLocationError(errorMessage);
+                    showNotification('❌ ' + errorMessage, 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // Konum görüntüsünü güncelle
+        function updateLocationDisplay(location) {
+            const now = new Date().toLocaleString('tr-TR');
+            document.getElementById('teacherLocation').innerHTML = `
+                <span class="text-green-700 font-semibold">✅ Aktif</span><br/>
+                <span class="text-gray-700">Enlem: ${location.lat.toFixed(6)}</span><br/>
+                <span class="text-gray-700">Boylam: ${location.lng.toFixed(6)}</span>
+            `;
+            document.getElementById('locationTime').textContent = `Son güncelleme: ${now}`;
+        }
+
+        // Konum hatası göster
+        function showLocationError(message) {
+            document.getElementById('teacherLocation').innerHTML = `
+                <span class="text-red-600 font-semibold">❌ Hata!</span><br/>
+                <span class="text-red-700 text-xs">${message}</span><br/>
+                <button onclick="updateLocation()" class="mt-2 bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700">
+                    Tekrar Dene
+                </button>
+            `;
+            document.getElementById('teacherLoading').classList.add('hidden');
+            document.getElementById('teacherContent').classList.remove('hidden');
+        }
+
+        // Bildirim göster
+        function showNotification(message, type) {
+            // Mevcut bildirimi kaldır
+            const existingNotif = document.getElementById('notification');
+            if (existingNotif) {
+                existingNotif.remove();
+            }
+
+            // Yeni bildirim oluştur
+            const notification = document.createElement('div');
+            notification.id = 'notification';
+            notification.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500' : 'bg-red-500'
+            } text-white font-semibold animate-pulse`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            // 3 saniye sonra kaldır
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
         }
 
         // Firebase gerçek zamanlı dinleme
@@ -485,17 +613,7 @@
 
         // Yeni QR oluştur
         function generateNewQR() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const location = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        generateQRCode(location);
-                    }
-                );
-            }
+            updateLocation();
         }
 
         // Mesafe hesaplama (Haversine formülü)

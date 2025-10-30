@@ -27,22 +27,11 @@
             margin: 0 auto;
             border-radius: 12px;
         }
-        /* Gizli tetikleyici alan */
-        .secret-trigger {
-            position: fixed;
-            bottom: 0;
-            right: 0;
-            width: 50px;
-            height: 50px;
-            opacity: 0;
-            cursor: pointer;
-            z-index: 999;
-        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 min-h-screen">
     
-    <!-- Mod Seçim Ekranı (Sadece Öğrenci) -->
+    <!-- Mod Seçim Ekranı -->
     <div id="selectScreen" class="min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md">
             <div class="bg-white rounded-3xl shadow-2xl p-8">
@@ -52,8 +41,12 @@
                 <p class="text-center text-gray-600 mb-8">Gelişmiş Versiyon ☁️</p>
                 
                 <div class="space-y-4">
+                    <button onclick="showTeacherPasswordModal()" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
+                        📝 Öğretmen Modu
+                    </button>
+                    
                     <button onclick="showStudentMode()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
-                        ✅ Öğrenci Girişi
+                        ✅ Öğrenci Modu
                     </button>
                 </div>
 
@@ -75,9 +68,6 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Gizli öğretmen tetikleyici -->
-        <div class="secret-trigger" onclick="secretClick()"></div>
     </div>
 
     <!-- Şifre Modal -->
@@ -111,7 +101,7 @@
                 </button>
                 
                 <p class="text-xs text-gray-500 text-center mt-4">
-                    Varsayılan şifre: <code class="bg-gray-100 px-2 py-1 rounded">ogretmen2024</code>
+                    Varsayılan şifre: <code class="bg-gray-100 px-2 py-1 rounded">ogretmen123</code>
                 </p>
             </div>
         </div>
@@ -289,40 +279,16 @@
         // ============================================
         // GÜVENLİK AYARLARI
         // ============================================
-        const TEACHER_PASSWORD = "ogretmen2024"; // Buradan şifreyi değiştirebilirsiniz
-        let clickCount = 0;
-        let clickTimer = null;
-
-        // Gizli öğretmen paneli açma (sağ alt köşeye 5 kez tıklama)
-        function secretClick() {
-            clickCount++;
-            
-            if (clickTimer) clearTimeout(clickTimer);
-            
-            if (clickCount === 5) {
-                openPasswordModal();
-                clickCount = 0;
-            }
-            
-            clickTimer = setTimeout(() => {
-                clickCount = 0;
-            }, 2000); // 2 saniye içinde 5 tıklama
-        }
-
-        // Klavye kısayolu (Ctrl + Shift + T)
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && e.shiftKey && e.key === 'T') {
-                e.preventDefault();
-                openPasswordModal();
-            }
-        });
+        const TEACHER_PASSWORD = "ogretmen123"; // Buradan şifreyi değiştirebilirsiniz
 
         // Şifre modalını aç
-        function openPasswordModal() {
+        function showTeacherPasswordModal() {
             document.getElementById('passwordModal').classList.remove('hidden');
             document.getElementById('teacherPassword').value = '';
             document.getElementById('passwordError').classList.add('hidden');
-            document.getElementById('teacherPassword').focus();
+            setTimeout(() => {
+                document.getElementById('teacherPassword').focus();
+            }, 100);
         }
 
         // Şifre modalını kapat
@@ -351,9 +317,14 @@
         }
 
         // Enter tuşu ile şifre girişi
-        document.getElementById('teacherPassword')?.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                verifyPassword();
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordInput = document.getElementById('teacherPassword');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        verifyPassword();
+                    }
+                });
             }
         });
 

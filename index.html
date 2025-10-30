@@ -27,11 +27,22 @@
             margin: 0 auto;
             border-radius: 12px;
         }
+        /* Gizli tetikleyici alan */
+        .secret-trigger {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 50px;
+            height: 50px;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 999;
+        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 min-h-screen">
     
-    <!-- Mod Seçim Ekranı -->
+    <!-- Mod Seçim Ekranı (Sadece Öğrenci) -->
     <div id="selectScreen" class="min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-md">
             <div class="bg-white rounded-3xl shadow-2xl p-8">
@@ -41,12 +52,8 @@
                 <p class="text-center text-gray-600 mb-8">Gelişmiş Versiyon ☁️</p>
                 
                 <div class="space-y-4">
-                    <button onclick="showTeacherMode()" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
-                        📝 Öğretmen Modu
-                    </button>
-                    
                     <button onclick="showStudentMode()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-6 rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all">
-                        ✅ Öğrenci Modu
+                        ✅ Öğrenci Girişi
                     </button>
                 </div>
 
@@ -66,6 +73,46 @@
                         <strong>💡 İpucu:</strong> Firebase ayarlarını kodda yapılandırın
                     </p>
                 </div>
+            </div>
+        </div>
+        
+        <!-- Gizli öğretmen tetikleyici -->
+        <div class="secret-trigger" onclick="secretClick()"></div>
+    </div>
+
+    <!-- Şifre Modal -->
+    <div id="passwordModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">🔐 Öğretmen Girişi</h2>
+                <button onclick="closePasswordModal()" class="text-gray-500 hover:text-gray-700 text-2xl">
+                    ×
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-semibold mb-2">
+                        Şifre
+                    </label>
+                    <input
+                        type="password"
+                        id="teacherPassword"
+                        placeholder="Öğretmen şifrenizi girin"
+                        class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none"
+                    />
+                    <p id="passwordError" class="text-red-500 text-sm mt-2 hidden">
+                        ❌ Şifre yanlış! Lütfen tekrar deneyin.
+                    </p>
+                </div>
+                
+                <button onclick="verifyPassword()" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-3 rounded-xl font-bold hover:shadow-lg transition-all">
+                    Giriş Yap
+                </button>
+                
+                <p class="text-xs text-gray-500 text-center mt-4">
+                    Varsayılan şifre: <code class="bg-gray-100 px-2 py-1 rounded">ogretmen2024</code>
+                </p>
             </div>
         </div>
     </div>
@@ -239,16 +286,96 @@
     </div>
 
     <script>
-        // Firebase yapılandırması
-       const firebaseConfig = {
-  apiKey: "AIzaSyDHILOLgcQ6WU--hjO8qd__7ApN_-4Jm3w",
-  authDomain: "qr-yoklama-sistemi-f54f5.firebaseapp.com",
-  databaseURL: "https://qr-yoklama-sistemi-f54f5-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "qr-yoklama-sistemi-f54f5",
-  storageBucket: "qr-yoklama-sistemi-f54f5.firebasestorage.app",
-  messagingSenderId: "431067742021",
-  appId: "1:431067742021:web:784c0ad599aab659fa882c"
-};
+        // ============================================
+        // GÜVENLİK AYARLARI
+        // ============================================
+        const TEACHER_PASSWORD = "ogretmen2024"; // Buradan şifreyi değiştirebilirsiniz
+        let clickCount = 0;
+        let clickTimer = null;
+
+        // Gizli öğretmen paneli açma (sağ alt köşeye 5 kez tıklama)
+        function secretClick() {
+            clickCount++;
+            
+            if (clickTimer) clearTimeout(clickTimer);
+            
+            if (clickCount === 5) {
+                openPasswordModal();
+                clickCount = 0;
+            }
+            
+            clickTimer = setTimeout(() => {
+                clickCount = 0;
+            }, 2000); // 2 saniye içinde 5 tıklama
+        }
+
+        // Klavye kısayolu (Ctrl + Shift + T)
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
+                openPasswordModal();
+            }
+        });
+
+        // Şifre modalını aç
+        function openPasswordModal() {
+            document.getElementById('passwordModal').classList.remove('hidden');
+            document.getElementById('teacherPassword').value = '';
+            document.getElementById('passwordError').classList.add('hidden');
+            document.getElementById('teacherPassword').focus();
+        }
+
+        // Şifre modalını kapat
+        function closePasswordModal() {
+            document.getElementById('passwordModal').classList.add('hidden');
+        }
+
+        // Şifre doğrulama
+        function verifyPassword() {
+            const password = document.getElementById('teacherPassword').value;
+            const errorMsg = document.getElementById('passwordError');
+            
+            if (password === TEACHER_PASSWORD) {
+                closePasswordModal();
+                showTeacherMode();
+            } else {
+                errorMsg.classList.remove('hidden');
+                document.getElementById('teacherPassword').value = '';
+                document.getElementById('teacherPassword').focus();
+                
+                // Hata mesajını 3 saniye sonra gizle
+                setTimeout(() => {
+                    errorMsg.classList.add('hidden');
+                }, 3000);
+            }
+        }
+
+        // Enter tuşu ile şifre girişi
+        document.getElementById('teacherPassword')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                verifyPassword();
+            }
+        });
+
+        // Modal dışına tıklanınca kapat
+        document.getElementById('passwordModal')?.addEventListener('click', function(e) {
+            if (e.target.id === 'passwordModal') {
+                closePasswordModal();
+            }
+        });
+
+        // ============================================
+        // FIREBASE YAPLANDIRMASI
+        // ============================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDHILOLgcQ6WU--hjO8qd__7ApN_-4Jm3w",
+            authDomain: "qr-yoklama-sistemi-f54f5.firebaseapp.com",
+            databaseURL: "https://qr-yoklama-sistemi-f54f5-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "qr-yoklama-sistemi-f54f5",
+            storageBucket: "qr-yoklama-sistemi-f54f5.firebasestorage.app",
+            messagingSenderId: "431067742021",
+            appId: "1:431067742021:web:784c0ad599aab659fa882c"
+        };
 
         // Firebase başlatma
         let database;

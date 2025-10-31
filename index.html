@@ -253,9 +253,14 @@
                     <h1 class="text-2xl font-bold text-gray-800">
                         📝 Öğretmen Paneli
                     </h1>
-                    <button onclick="showSelectScreen()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
-                        ← Geri
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="startNewSession()" class="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 text-sm">
+                            🆕 Yeni Ders
+                        </button>
+                        <button onclick="showSelectScreen()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+                            ← Geri
+                        </button>
+                    </div>
                 </div>
 
                 <div id="teacherLoading" class="text-center py-12">
@@ -367,9 +372,14 @@
                                 <span class="text-2xl">👥</span>
                                 <span class="font-bold text-gray-800">Yoklama Listesi</span>
                             </div>
-                            <span id="attendanceCount" class="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
-                                0
-                            </span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="loadAttendanceList()" class="bg-blue-500 text-white px-3 py-1 rounded-lg hover:bg-blue-600 text-sm" title="Listeyi Yenile">
+                                    🔄
+                                </button>
+                                <span id="attendanceCount" class="bg-green-600 text-white px-3 py-1 rounded-full text-sm font-bold">
+                                    0
+                                </span>
+                            </div>
                         </div>
                         
                         <div id="attendanceList" class="space-y-2 max-h-96 overflow-y-auto">
@@ -889,6 +899,57 @@
         let videoStream = null;
         let scanInterval = null;
         let currentSessionId = null;
+        let attendanceListRefreshInterval = null;
+
+        // Yeni ders başlat
+        function startNewSession() {
+            if (confirm('Yeni ders başlatmak istediğinize emin misiniz? Mevcut yoklama listesi temizlenecek.')) {
+                // Eski listener'ı durdur
+                if (useFirebase && currentSessionId) {
+                    database.ref('sessions/' + currentSessionId + '/attendances').off();
+                }
+                
+                // Session'ı sıfırla
+                currentSessionId = null;
+                
+                // Yeni QR oluştur
+                if (currentLocation) {
+                    generateQRCode(currentLocation);
+                    loadAttendanceList();
+                    
+                    // Yeni listener başlat
+                    if (useFirebase && currentSessionId) {
+                        listenToFirebaseUpdates();
+                    }
+                    
+                    showNotification('🆕 Yeni ders başlatıldı!', 'success');
+                } else {
+                    alert('Önce konum belirlemelisiniz!');
+                }
+            }
+        }
+
+        // Otomatik liste yenileme başlat (localStorage için)
+        function startAttendanceListRefresh() {
+            if (attendanceListRefreshInterval) {
+                clearInterval(attendanceListRefreshInterval);
+            }
+            
+            // Her 3 saniyede bir listeyi yenile (sadece Firebase kullanılmıyorsa)
+            if (!useFirebase) {
+                attendanceListRefreshInterval = setInterval(() => {
+                    loadAttendanceList();
+                }, 3000);
+            }
+        }
+
+        // Liste yenilemeyi durdur
+        function stopAttendanceListRefresh() {
+            if (attendanceListRefreshInterval) {
+                clearInterval(attendanceListRefreshInterval);
+                attendanceListRefreshInterval = null;
+            }
+        }
 
         // Ekran geçişleri
         function showSelectScreen() {
@@ -897,6 +958,7 @@
             document.getElementById('studentScreen').classList.add('hidden');
             stopQRScanner();
             stopQRRefresh();
+            stopAttendanceListRefresh();
         }
 
         function showTeacherMode() {
@@ -927,6 +989,7 @@
                 generateQRCode(currentLocation);
                 loadAttendanceList();
                 startQRRefresh();
+                startAttendanceListRefresh(); // Otomatik liste yenileme
                 
                 if (useFirebase && currentSessionId) {
                     listenToFirebaseUpdates();
@@ -942,6 +1005,7 @@
                         generateQRCode(currentLocation);
                         loadAttendanceList();
                         startQRRefresh();
+                        startAttendanceListRefresh(); // Otomatik liste yenileme
                         
                         if (useFirebase && currentSessionId) {
                             listenToFirebaseUpdates();
@@ -1029,19 +1093,24 @@
 
         function generateQRCode(location) {
             const timestamp = Date.now();
-            currentSessionId = 'session_' + timestamp;
+            
+            // İLK DEFA oluşturuluyorsa yeni sessionId, yoksa mevcut sessionId'yi kullan
+            if (!currentSessionId) {
+                currentSessionId = 'session_' + timestamp;
+                console.log('Yeni session oluşturuldu:', currentSessionId);
+            }
             
             const validityMinutes = parseInt(document.getElementById('qrValidityTime').value);
             const expiryTime = timestamp + (validityMinutes * 60 * 1000);
             
             const qrData = {
                 type: 'attendance',
-                sessionId: currentSessionId,
+                sessionId: currentSessionId,  // SABİT SESSION ID
                 location: location,
                 radius: 50,
                 timestamp: timestamp,
                 expiryTime: expiryTime,
-                randomToken: Math.random().toString(36).substring(7)
+                randomToken: Math.random().toString(36).substring(7)  // HER SEFERINDE DEĞİŞEN TOKEN
             };
             
             currentQRData = qrData;
@@ -1063,11 +1132,21 @@
                 `⏱️ QR kod şu saate kadar geçerli: ${expiryDate.toLocaleTimeString('tr-TR')}`;
 
             if (useFirebase) {
-                database.ref('sessions/' + currentSessionId).set({
-                    createdAt: firebase.database.ServerValue.TIMESTAMP,
+                // İlk seferde set, sonrasında update kullan
+                const sessionRef = database.ref('sessions/' + currentSessionId);
+                sessionRef.update({
+                    lastUpdated: firebase.database.ServerValue.TIMESTAMP,
                     expiryTime: expiryTime,
                     location: location,
                     courseName: document.getElementById('courseName')?.value || 'Belirtilmemiş'
+                }).catch(() => {
+                    // İlk seferde update olmayabilir, set dene
+                    sessionRef.set({
+                        createdAt: firebase.database.ServerValue.TIMESTAMP,
+                        expiryTime: expiryTime,
+                        location: location,
+                        courseName: document.getElementById('courseName')?.value || 'Belirtilmemiş'
+                    });
                 });
             }
         }

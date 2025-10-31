@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Yoklama Sistemi - Güvenli</title>
+    <title>QR Yoklama Sistemi - Güvenli (Geliştirilmiş)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
@@ -14,6 +14,10 @@
     
     <!-- SheetJS for Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- Leaflet for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <style>
         @keyframes pulse {
@@ -33,6 +37,12 @@
         }
         .countdown-bar {
             animation: countdown var(--duration) linear;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 12px;
+            z-index: 1;
         }
     </style>
 </head>
@@ -105,6 +115,131 @@
                 
                 <button onclick="verifyPassword()" class="w-full bg-gradient-to-r from-purple-500 to-indigo-600 text-white py-3 rounded-xl font-bold hover:shadow-lg transition-all">
                     Giriş Yap
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Konum Seçim Modal -->
+    <div id="locationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl p-6 max-w-4xl w-full my-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800">📍 Konum Seçimi</h2>
+                <button onclick="closeLocationModal()" class="text-gray-500 hover:text-gray-700 text-2xl">
+                    ×
+                </button>
+            </div>
+            
+            <!-- Konum Seçim Metodları -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                <button onclick="switchLocationMethod('auto')" id="btn-auto" class="location-method-btn bg-blue-100 border-2 border-blue-500 text-blue-700 py-3 rounded-xl font-semibold hover:bg-blue-200 transition-all">
+                    🌐 Otomatik GPS
+                </button>
+                <button onclick="switchLocationMethod('manual')" id="btn-manual" class="location-method-btn bg-gray-100 border-2 border-gray-300 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-all">
+                    ✏️ Manuel Giriş
+                </button>
+                <button onclick="switchLocationMethod('map')" id="btn-map" class="location-method-btn bg-gray-100 border-2 border-gray-300 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-all">
+                    🗺️ Harita
+                </button>
+            </div>
+
+            <!-- Otomatik GPS -->
+            <div id="method-auto" class="location-method hidden">
+                <div class="bg-blue-50 p-6 rounded-xl">
+                    <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span>🌐</span> Otomatik Konum Algılama
+                    </h3>
+                    <button onclick="getAutoLocation()" class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold mb-4">
+                        📍 Konumu Al
+                    </button>
+                    <div id="autoLocationStatus" class="text-sm text-gray-600">
+                        Konumunuz otomatik olarak alınacak
+                    </div>
+                    <div id="autoLocationResult" class="hidden mt-4 p-4 bg-white rounded-lg">
+                        <p class="text-sm"><strong>Enlem:</strong> <span id="autoLat">-</span></p>
+                        <p class="text-sm"><strong>Boylam:</strong> <span id="autoLng">-</span></p>
+                        <p class="text-sm"><strong>Doğruluk:</strong> <span id="autoAcc">-</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manuel Giriş -->
+            <div id="method-manual" class="location-method hidden">
+                <div class="bg-orange-50 p-6 rounded-xl">
+                    <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span>✏️</span> Manuel Konum Girişi
+                    </h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-gray-700 font-semibold mb-2">
+                                Enlem (Latitude)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.000001"
+                                id="manualLat"
+                                placeholder="Örn: 37.0000"
+                                class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 font-semibold mb-2">
+                                Boylam (Longitude)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.000001"
+                                id="manualLng"
+                                placeholder="Örn: 35.3213"
+                                class="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-orange-500 focus:outline-none"
+                            />
+                        </div>
+                        <div class="bg-blue-50 p-3 rounded-lg">
+                            <p class="text-xs text-gray-700">
+                                💡 <strong>İpucu:</strong> Google Maps'ten konum kopyalayabilirsiniz:<br/>
+                                1. Google Maps'te konuma sağ tıklayın<br/>
+                                2. İlk satırdaki koordinatları kopyalayın<br/>
+                                3. Buraya yapıştırın
+                            </p>
+                        </div>
+                        <button onclick="setManualLocation()" class="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 font-semibold">
+                            ✓ Konumu Kaydet
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Harita -->
+            <div id="method-map" class="location-method hidden">
+                <div class="bg-green-50 p-6 rounded-xl">
+                    <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <span>🗺️</span> Harita Üzerinden Seçim
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Harita üzerinde bir noktaya tıklayarak konumu seçin
+                    </p>
+                    <div id="map" class="mb-4"></div>
+                    <div id="mapSelectedLocation" class="hidden bg-white p-4 rounded-lg mb-4">
+                        <p class="text-sm"><strong>Seçilen Konum:</strong></p>
+                        <p class="text-sm">Enlem: <span id="mapLat">-</span></p>
+                        <p class="text-sm">Boylam: <span id="mapLng">-</span></p>
+                    </div>
+                    <button onclick="setMapLocation()" id="mapConfirmBtn" class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 font-semibold" disabled>
+                        ✓ Bu Konumu Kullan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kayıtlı Konumlar -->
+            <div class="mt-6 bg-purple-50 p-4 rounded-xl">
+                <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <span>💾</span> Kayıtlı Konumlar
+                </h3>
+                <div id="savedLocationsList" class="space-y-2 mb-3">
+                    <!-- Kayıtlı konumlar buraya eklenecek -->
+                </div>
+                <button onclick="showSaveLocationDialog()" class="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 text-sm">
+                    + Mevcut Konumu Kaydet
                 </button>
             </div>
         </div>
@@ -211,8 +346,8 @@
                                 <span class="text-2xl">📍</span>
                                 <span class="font-semibold text-gray-800">Sınıf Konumu:</span>
                             </div>
-                            <button onclick="updateLocation()" class="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-1">
-                                🔄 Konumu Güncelle
+                            <button onclick="showLocationModal()" class="bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 text-sm flex items-center gap-1">
+                                🔄 Konumu Değiştir
                             </button>
                         </div>
                         <p class="text-sm text-gray-700" id="teacherLocation">
@@ -349,6 +484,10 @@
         let qrRefreshInterval = null;
         let qrCountdownInterval = null;
         let currentLocation = null;
+        let map = null;
+        let mapMarker = null;
+        let selectedMapLocation = null;
+        let currentLocationMethod = 'auto';
 
         // Cihaz parmak izi oluştur
         function getDeviceFingerprint() {
@@ -378,7 +517,277 @@
 
         const deviceId = simpleHash(getDeviceFingerprint());
 
-        // Şifre modalını aç
+        // ============================================
+        // KONUM YÖNETİMİ
+        // ============================================
+
+        // Konum modalını aç
+        function showLocationModal() {
+            document.getElementById('locationModal').classList.remove('hidden');
+            switchLocationMethod('auto');
+            loadSavedLocations();
+        }
+
+        // Konum modalını kapat
+        function closeLocationModal() {
+            document.getElementById('locationModal').classList.add('hidden');
+        }
+
+        // Konum yöntemi değiştir
+        function switchLocationMethod(method) {
+            currentLocationMethod = method;
+            
+            // Tüm butonları gri yap
+            document.querySelectorAll('.location-method-btn').forEach(btn => {
+                btn.className = 'location-method-btn bg-gray-100 border-2 border-gray-300 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-200 transition-all';
+            });
+            
+            // Aktif butonu vurgula
+            const activeBtn = document.getElementById('btn-' + method);
+            if (activeBtn) {
+                if (method === 'auto') {
+                    activeBtn.className = 'location-method-btn bg-blue-100 border-2 border-blue-500 text-blue-700 py-3 rounded-xl font-semibold hover:bg-blue-200 transition-all';
+                } else if (method === 'manual') {
+                    activeBtn.className = 'location-method-btn bg-orange-100 border-2 border-orange-500 text-orange-700 py-3 rounded-xl font-semibold hover:bg-orange-200 transition-all';
+                } else if (method === 'map') {
+                    activeBtn.className = 'location-method-btn bg-green-100 border-2 border-green-500 text-green-700 py-3 rounded-xl font-semibold hover:bg-green-200 transition-all';
+                }
+            }
+            
+            // Tüm method div'lerini gizle
+            document.querySelectorAll('.location-method').forEach(div => {
+                div.classList.add('hidden');
+            });
+            
+            // Seçili method'u göster
+            const activeMethod = document.getElementById('method-' + method);
+            if (activeMethod) {
+                activeMethod.classList.remove('hidden');
+            }
+            
+            // Harita metoduysa haritayı başlat
+            if (method === 'map' && !map) {
+                setTimeout(initMap, 100);
+            }
+        }
+
+        // Otomatik konum al
+        function getAutoLocation() {
+            const statusEl = document.getElementById('autoLocationStatus');
+            statusEl.innerHTML = '<span class="text-blue-600 animate-pulse">📍 Konum alınıyor...</span>';
+            
+            if (!navigator.geolocation) {
+                statusEl.innerHTML = '<span class="text-red-600">❌ Tarayıcınız konum özelliğini desteklemiyor!</span>';
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const location = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                    
+                    document.getElementById('autoLat').textContent = location.lat.toFixed(6);
+                    document.getElementById('autoLng').textContent = location.lng.toFixed(6);
+                    document.getElementById('autoAcc').textContent = '±' + location.accuracy.toFixed(0) + 'm';
+                    document.getElementById('autoLocationResult').classList.remove('hidden');
+                    
+                    statusEl.innerHTML = '<span class="text-green-600">✅ Konum başarıyla alındı!</span>';
+                    
+                    // Konumu kaydet
+                    setLocation(location, 'Otomatik GPS');
+                },
+                (error) => {
+                    let errorMessage = 'Konum alınamadı! ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += 'Konum izni verilmedi.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += 'Konum bilgisi kullanılamıyor.';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += 'Zaman aşımı.';
+                            break;
+                        default:
+                            errorMessage += 'Bilinmeyen hata.';
+                    }
+                    statusEl.innerHTML = `<span class="text-red-600">❌ ${errorMessage}</span>`;
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // Manuel konum kaydet
+        function setManualLocation() {
+            const lat = parseFloat(document.getElementById('manualLat').value);
+            const lng = parseFloat(document.getElementById('manualLng').value);
+            
+            if (isNaN(lat) || isNaN(lng)) {
+                alert('Lütfen geçerli enlem ve boylam değerleri girin!');
+                return;
+            }
+            
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                alert('Geçersiz koordinatlar! Enlem -90 ile 90, Boylam -180 ile 180 arasında olmalı.');
+                return;
+            }
+            
+            const location = {
+                lat: lat,
+                lng: lng,
+                accuracy: 10 // Manuel girişte varsayılan doğruluk
+            };
+            
+            setLocation(location, 'Manuel Giriş');
+        }
+
+        // Harita başlat
+        function initMap() {
+            if (map) return;
+            
+            // Varsayılan konum: Türkiye merkezi
+            const defaultLat = currentLocation ? currentLocation.lat : 39.9334;
+            const defaultLng = currentLocation ? currentLocation.lng : 32.8597;
+            
+            map = L.map('map').setView([defaultLat, defaultLng], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            
+            // Haritaya tıklanınca marker ekle
+            map.on('click', function(e) {
+                if (mapMarker) {
+                    map.removeLayer(mapMarker);
+                }
+                
+                mapMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+                selectedMapLocation = {
+                    lat: e.latlng.lat,
+                    lng: e.latlng.lng,
+                    accuracy: 10
+                };
+                
+                document.getElementById('mapLat').textContent = e.latlng.lat.toFixed(6);
+                document.getElementById('mapLng').textContent = e.latlng.lng.toFixed(6);
+                document.getElementById('mapSelectedLocation').classList.remove('hidden');
+                document.getElementById('mapConfirmBtn').disabled = false;
+            });
+        }
+
+        // Harita konumunu kaydet
+        function setMapLocation() {
+            if (!selectedMapLocation) {
+                alert('Lütfen harita üzerinde bir konum seçin!');
+                return;
+            }
+            
+            setLocation(selectedMapLocation, 'Harita Seçimi');
+        }
+
+        // Konumu ayarla ve modalı kapat
+        function setLocation(location, source) {
+            currentLocation = location;
+            updateLocationDisplay(currentLocation, source);
+            closeLocationModal();
+            
+            // QR kodu yenile
+            if (document.getElementById('teacherContent').classList.contains('hidden') === false) {
+                generateQRCode(currentLocation);
+                showNotification('✅ Konum güncellendi! Yeni QR kod oluşturuldu.', 'success');
+            }
+        }
+
+        // Kayıtlı konumları yükle
+        function loadSavedLocations() {
+            const saved = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+            const container = document.getElementById('savedLocationsList');
+            
+            if (saved.length === 0) {
+                container.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Henüz kayıtlı konum yok</p>';
+            } else {
+                container.innerHTML = saved.map((loc, idx) => `
+                    <div class="flex items-center justify-between bg-white p-3 rounded-lg">
+                        <div class="flex-1">
+                            <p class="font-semibold text-sm text-gray-800">${loc.name}</p>
+                            <p class="text-xs text-gray-500">${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="useSavedLocation(${idx})" class="bg-purple-600 text-white px-3 py-1 rounded text-xs hover:bg-purple-700">
+                                Kullan
+                            </button>
+                            <button onclick="deleteSavedLocation(${idx})" class="bg-red-500 text-white px-3 py-1 rounded text-xs hover:bg-red-600">
+                                Sil
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        // Kayıtlı konum kullan
+        function useSavedLocation(index) {
+            const saved = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+            if (saved[index]) {
+                setLocation(saved[index], 'Kayıtlı Konum: ' + saved[index].name);
+            }
+        }
+
+        // Kayıtlı konum sil
+        function deleteSavedLocation(index) {
+            if (confirm('Bu konumu silmek istediğinizden emin misiniz?')) {
+                const saved = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+                saved.splice(index, 1);
+                localStorage.setItem('savedLocations', JSON.stringify(saved));
+                loadSavedLocations();
+            }
+        }
+
+        // Konum kaydetme dialogu
+        function showSaveLocationDialog() {
+            if (!currentLocation) {
+                alert('Önce bir konum seçin!');
+                return;
+            }
+            
+            const name = prompt('Bu konum için bir isim girin (Örn: A101 Sınıfı):');
+            if (name && name.trim()) {
+                const saved = JSON.parse(localStorage.getItem('savedLocations') || '[]');
+                saved.push({
+                    name: name.trim(),
+                    lat: currentLocation.lat,
+                    lng: currentLocation.lng,
+                    accuracy: currentLocation.accuracy
+                });
+                localStorage.setItem('savedLocations', JSON.stringify(saved));
+                loadSavedLocations();
+                showNotification('✅ Konum kaydedildi!', 'success');
+            }
+        }
+
+        // Konum görüntüsünü güncelle
+        function updateLocationDisplay(location, source) {
+            const now = new Date().toLocaleString('tr-TR');
+            document.getElementById('teacherLocation').innerHTML = `
+                <span class="text-green-700 font-semibold">✅ Aktif</span> ${source ? `<span class="text-xs text-gray-500">(${source})</span>` : ''}<br/>
+                <span class="text-gray-700">Enlem: ${location.lat.toFixed(6)}</span><br/>
+                <span class="text-gray-700">Boylam: ${location.lng.toFixed(6)}</span><br/>
+                <span class="text-xs text-gray-500">Doğruluk: ±${location.accuracy.toFixed(0)}m</span>
+            `;
+            document.getElementById('locationTime').textContent = `Son güncelleme: ${now}`;
+        }
+
+        // ============================================
+        // ŞİFRE MODALINI AÇ/KAPAT
+        // ============================================
+        
         function showTeacherPasswordModal() {
             document.getElementById('passwordModal').classList.remove('hidden');
             document.getElementById('teacherPassword').value = '';
@@ -388,12 +797,10 @@
             }, 100);
         }
 
-        // Şifre modalını kapat
         function closePasswordModal() {
             document.getElementById('passwordModal').classList.add('hidden');
         }
 
-        // Şifre doğrulama
         function verifyPassword() {
             const password = document.getElementById('teacherPassword').value;
             const errorMsg = document.getElementById('passwordError');
@@ -428,6 +835,12 @@
         document.getElementById('passwordModal')?.addEventListener('click', function(e) {
             if (e.target.id === 'passwordModal') {
                 closePasswordModal();
+            }
+        });
+
+        document.getElementById('locationModal')?.addEventListener('click', function(e) {
+            if (e.target.id === 'locationModal') {
+                closeLocationModal();
             }
         });
 
@@ -504,61 +917,38 @@
 
         // Öğretmen modu başlatma
         function initTeacherMode() {
-            getLocationAndInitialize();
-        }
-
-        // Konum al ve başlat
-        function getLocationAndInitialize() {
-            if (!navigator.geolocation) {
-                showLocationError('Tarayıcınız konum özelliğini desteklemiyor!');
-                return;
-            }
-
-            document.getElementById('teacherLocation').innerHTML = '<span class="text-blue-600">📍 Konum alınıyor...</span>';
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    currentLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    };
-                    
-                    updateLocationDisplay(currentLocation);
-                    generateQRCode(currentLocation);
-                    loadAttendanceList();
-                    startQRRefresh();
-                    
-                    document.getElementById('teacherLoading').classList.add('hidden');
-                    document.getElementById('teacherContent').classList.remove('hidden');
-
-                    if (useFirebase && currentSessionId) {
-                        listenToFirebaseUpdates();
-                    }
-                },
-                (error) => {
-                    let errorMessage = 'Konum alınamadı! ';
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage += 'Konum izni verilmedi. Lütfen tarayıcı ayarlarından konum iznini açın.';
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage += 'Konum bilgisi kullanılamıyor.';
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage += 'Konum alma zaman aşımına uğradı.';
-                            break;
-                        default:
-                            errorMessage += 'Bilinmeyen bir hata oluştu.';
-                    }
-                    showLocationError(errorMessage);
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
+            // Konum modal'ını göster
+            showLocationModal();
+            
+            // Eğer konum daha önce alınmışsa direkt başlat
+            if (currentLocation) {
+                document.getElementById('teacherLoading').classList.add('hidden');
+                document.getElementById('teacherContent').classList.remove('hidden');
+                generateQRCode(currentLocation);
+                loadAttendanceList();
+                startQRRefresh();
+                
+                if (useFirebase && currentSessionId) {
+                    listenToFirebaseUpdates();
                 }
-            );
+            } else {
+                // Otomatik konum almayı dene
+                getAutoLocation();
+                setTimeout(() => {
+                    if (currentLocation) {
+                        closeLocationModal();
+                        document.getElementById('teacherLoading').classList.add('hidden');
+                        document.getElementById('teacherContent').classList.remove('hidden');
+                        generateQRCode(currentLocation);
+                        loadAttendanceList();
+                        startQRRefresh();
+                        
+                        if (useFirebase && currentSessionId) {
+                            listenToFirebaseUpdates();
+                        }
+                    }
+                }, 2000);
+            }
         }
 
         // QR otomatik yenileme başlat
@@ -576,7 +966,6 @@
             countdownBar.style.setProperty('--duration', refreshTime + 's');
             countdownBar.style.width = '100%';
             
-            // Countdown animasyonu
             setTimeout(() => {
                 countdownBar.classList.add('countdown-bar');
             }, 10);
@@ -596,7 +985,6 @@
                     generateQRCode(currentLocation);
                     remainingTime = refreshTime;
                     
-                    // Countdown resetle
                     countdownBar.classList.remove('countdown-bar');
                     countdownBar.style.width = '100%';
                     setTimeout(() => {
@@ -606,7 +994,6 @@
             }, refreshTime * 1000);
         }
 
-        // QR yenilemeyi durdur
         function stopQRRefresh() {
             if (qrRefreshInterval) {
                 clearInterval(qrRefreshInterval);
@@ -618,12 +1005,10 @@
             }
         }
 
-        // QR yenilemeyi yeniden başlat
         function restartQRRefresh() {
             startQRRefresh();
         }
 
-        // Manuel QR yenileme
         function manualRefreshQR() {
             if (currentLocation) {
                 generateQRCode(currentLocation);
@@ -633,80 +1018,6 @@
             }
         }
 
-        // Konum güncelle
-        function updateLocation() {
-            document.getElementById('teacherLocation').innerHTML = '<span class="text-blue-600 animate-pulse">🔄 Konum güncelleniyor...</span>';
-            
-            if (!navigator.geolocation) {
-                showLocationError('Tarayıcınız konum özelliğini desteklemiyor!');
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    currentLocation = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    };
-                    
-                    updateLocationDisplay(currentLocation);
-                    generateQRCode(currentLocation);
-                    
-                    showNotification('✅ Konum güncellendi! Yeni QR kod oluşturuldu.', 'success');
-                },
-                (error) => {
-                    let errorMessage = 'Konum güncellenemedi! ';
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage += 'Konum izni verilmedi.';
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage += 'Konum bilgisi kullanılamıyor.';
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage += 'Zaman aşımı.';
-                            break;
-                        default:
-                            errorMessage += 'Bilinmeyen hata.';
-                    }
-                    showLocationError(errorMessage);
-                    showNotification('❌ ' + errorMessage, 'error');
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
-        }
-
-        // Konum görüntüsünü güncelle
-        function updateLocationDisplay(location) {
-            const now = new Date().toLocaleString('tr-TR');
-            document.getElementById('teacherLocation').innerHTML = `
-                <span class="text-green-700 font-semibold">✅ Aktif</span><br/>
-                <span class="text-gray-700">Enlem: ${location.lat.toFixed(6)}</span><br/>
-                <span class="text-gray-700">Boylam: ${location.lng.toFixed(6)}</span><br/>
-                <span class="text-xs text-gray-500">Doğruluk: ±${location.accuracy.toFixed(0)}m</span>
-            `;
-            document.getElementById('locationTime').textContent = `Son güncelleme: ${now}`;
-        }
-
-        // Konum hatası göster
-        function showLocationError(message) {
-            document.getElementById('teacherLocation').innerHTML = `
-                <span class="text-red-600 font-semibold">❌ Hata!</span><br/>
-                <span class="text-red-700 text-xs">${message}</span><br/>
-                <button onclick="updateLocation()" class="mt-2 bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700">
-                    Tekrar Dene
-                </button>
-            `;
-            document.getElementById('teacherLoading').classList.add('hidden');
-            document.getElementById('teacherContent').classList.remove('hidden');
-        }
-
-        // Firebase gerçek zamanlı dinleme
         function listenToFirebaseUpdates() {
             if (!useFirebase || !currentSessionId) return;
 
@@ -716,7 +1027,6 @@
             });
         }
 
-        // QR kod oluşturma (zaman damgalı ve geçerlilik süreli)
         function generateQRCode(location) {
             const timestamp = Date.now();
             currentSessionId = 'session_' + timestamp;
@@ -748,12 +1058,10 @@
                 correctLevel: QRCode.CorrectLevel.H
             });
 
-            // Geçerlilik süresini göster
             const expiryDate = new Date(expiryTime);
             document.getElementById('qrExpireTime').textContent = 
                 `⏱️ QR kod şu saate kadar geçerli: ${expiryDate.toLocaleTimeString('tr-TR')}`;
 
-            // Firebase'e session kaydet
             if (useFirebase) {
                 database.ref('sessions/' + currentSessionId).set({
                     createdAt: firebase.database.ServerValue.TIMESTAMP,
@@ -764,7 +1072,6 @@
             }
         }
 
-        // Mesafe hesaplama (Haversine formülü)
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371e3;
             const φ1 = lat1 * Math.PI / 180;
@@ -780,7 +1087,6 @@
             return R * c;
         }
 
-        // QR tarayıcı başlatma
         async function startQRScanner() {
             const studentName = document.getElementById('studentName').value.trim();
             
@@ -808,7 +1114,6 @@
             }
         }
 
-        // QR kod tarama
         function scanQRCode() {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
@@ -828,14 +1133,12 @@
             }
         }
 
-        // QR kod işleme (güvenlik kontrolleri ile)
         function processQRCode(qrData) {
             stopQRScanner();
             
             try {
                 const qrContent = JSON.parse(qrData);
                 
-                // 1. QR kodun geçerlilik süresini kontrol et
                 const now = Date.now();
                 if (now > qrContent.expiryTime) {
                     showResult('expired', null);
@@ -861,20 +1164,17 @@
                                 qrContent.location.lng
                             );
                             
-                            // 2. Konum kontrolü
                             if (distance > qrContent.radius) {
                                 showResult('out_of_range', distance.toFixed(0));
                                 return;
                             }
                             
-                            // 3. Tekrarlı yoklama kontrolü
                             checkDuplicateAttendance(studentName, studentNumber, qrContent.sessionId, (isDuplicate) => {
                                 if (isDuplicate) {
                                     showResult('duplicate', distance.toFixed(0));
                                     return;
                                 }
                                 
-                                // Yoklama kaydı oluştur
                                 const attendance = {
                                     name: studentName,
                                     studentNumber: studentNumber || 'Belirtilmemiş',
@@ -906,7 +1206,6 @@
             }
         }
 
-        // Tekrarlı yoklama kontrolü
         function checkDuplicateAttendance(name, number, sessionId, callback) {
             const preventDuplicate = document.getElementById('preventDuplicate')?.checked !== false;
             
@@ -941,7 +1240,6 @@
             }
         }
 
-        // Sonuç gösterme
         function showResult(status, distance) {
             const resultDiv = document.getElementById('scanResult');
             resultDiv.classList.remove('hidden');
@@ -1000,7 +1298,6 @@
             }
         }
 
-        // QR tarayıcı durdurma
         function stopQRScanner() {
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
@@ -1013,7 +1310,6 @@
             document.getElementById('scannerContainer').classList.add('hidden');
         }
 
-        // Yoklama kaydetme
         function saveAttendance(attendance) {
             if (useFirebase) {
                 const attendanceRef = database.ref('sessions/' + attendance.sessionId + '/attendances');
@@ -1026,7 +1322,6 @@
             loadAttendanceList();
         }
 
-        // Yoklama listesi yükleme
         function loadAttendanceList() {
             if (useFirebase && currentSessionId) {
                 database.ref('sessions/' + currentSessionId + '/attendances').once('value', (snapshot) => {
@@ -1043,7 +1338,6 @@
             }
         }
 
-        // Yoklama listesini göster
         function displayAttendanceList(list) {
             const container = document.getElementById('attendanceList');
             const count = document.getElementById('attendanceCount');
@@ -1075,7 +1369,6 @@
             }
         }
 
-        // Bildirim göster
         function showNotification(message, type) {
             const existingNotif = document.getElementById('notification');
             if (existingNotif) {
@@ -1095,7 +1388,6 @@
             }, 3000);
         }
 
-        // Excel indirme
         function downloadExcel() {
             getAttendanceData((list) => {
                 if (list.length === 0) {
@@ -1130,7 +1422,6 @@
             });
         }
 
-        // CSV indirme
         function downloadCSV() {
             getAttendanceData((list) => {
                 if (list.length === 0) {
@@ -1155,7 +1446,6 @@
             });
         }
 
-        // Veri alma yardımcı fonksiyonu
         function getAttendanceData(callback) {
             if (useFirebase && currentSessionId) {
                 database.ref('sessions/' + currentSessionId + '/attendances').once('value', (snapshot) => {
@@ -1172,7 +1462,6 @@
             }
         }
 
-        // Listeyi temizle
         function clearAttendance() {
             if (confirm('Yoklama listesini temizlemek istediğinizden emin misiniz?')) {
                 if (useFirebase && currentSessionId) {

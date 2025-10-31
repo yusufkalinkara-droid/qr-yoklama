@@ -382,6 +382,18 @@
                             </div>
                         </div>
                         
+                        <!-- Debug Bilgisi -->
+                        <div class="mb-3 p-2 bg-white rounded text-xs">
+                            <div class="flex items-center justify-between">
+                                <span class="text-gray-600">Session ID:</span>
+                                <code id="debugSessionId" class="text-purple-700 font-mono">-</code>
+                            </div>
+                            <div class="flex items-center justify-between mt-1">
+                                <span class="text-gray-600">Veri Kaynağı:</span>
+                                <span id="debugDataSource" class="text-blue-700">-</span>
+                            </div>
+                        </div>
+                        
                         <div id="attendanceList" class="space-y-2 max-h-96 overflow-y-auto">
                             <p class="text-center text-gray-500 py-4">
                                 Henüz yoklama yok
@@ -898,8 +910,14 @@
         let currentQRData = null;
         let videoStream = null;
         let scanInterval = null;
-        let currentSessionId = null;
+        let currentSessionId = localStorage.getItem('currentSessionId') || null;
         let attendanceListRefreshInterval = null;
+
+        // Session ID'yi kaydet
+        function saveCurrentSession(sessionId) {
+            currentSessionId = sessionId;
+            localStorage.setItem('currentSessionId', sessionId);
+        }
 
         // Yeni ders başlat
         function startNewSession() {
@@ -911,6 +929,7 @@
                 
                 // Session'ı sıfırla
                 currentSessionId = null;
+                localStorage.removeItem('currentSessionId');
                 
                 // Yeni QR oluştur
                 if (currentLocation) {
@@ -1096,7 +1115,8 @@
             
             // İLK DEFA oluşturuluyorsa yeni sessionId, yoksa mevcut sessionId'yi kullan
             if (!currentSessionId) {
-                currentSessionId = 'session_' + timestamp;
+                const newSessionId = 'session_' + timestamp;
+                saveCurrentSession(newSessionId);
                 console.log('Yeni session oluşturuldu:', currentSessionId);
             }
             
@@ -1412,7 +1432,19 @@
                     displayAttendanceList(list);
                 });
             } else {
-                const list = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                // LocalStorage kullanılıyorsa - mevcut session'a ait yoklamaları filtrele
+                const allList = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                
+                // Eğer session ID varsa, sadece o session'a ait yoklamaları göster
+                let list = allList;
+                if (currentSessionId) {
+                    list = allList.filter(att => att.sessionId === currentSessionId);
+                }
+                
+                console.log('Toplam yoklama:', allList.length);
+                console.log('Bu session:', currentSessionId);
+                console.log('Filtrelenmiş:', list.length);
+                
                 displayAttendanceList(list);
             }
         }
@@ -1424,6 +1456,16 @@
             if (!container || !count) return;
             
             count.textContent = list.length;
+            
+            // Debug bilgilerini güncelle
+            const debugSessionId = document.getElementById('debugSessionId');
+            const debugDataSource = document.getElementById('debugDataSource');
+            if (debugSessionId) {
+                debugSessionId.textContent = currentSessionId ? currentSessionId.substring(0, 20) + '...' : 'Yok';
+            }
+            if (debugDataSource) {
+                debugDataSource.textContent = useFirebase ? 'Firebase (Bulut)' : 'LocalStorage (Yerel)';
+            }
             
             if (list.length === 0) {
                 container.innerHTML = '<p class="text-center text-gray-500 py-4">Henüz yoklama yok</p>';
@@ -1441,6 +1483,12 @@
                             </div>
                         </div>
                         <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                            ${student.distance}m
+                        </span>
+                    </div>
+                `).join('');
+            }
+        }
                             ${student.distance}m
                         </span>
                     </div>
@@ -1536,7 +1584,15 @@
                     callback(list);
                 });
             } else {
-                const list = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                // LocalStorage kullanılıyorsa - mevcut session'a ait yoklamaları filtrele
+                const allList = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                
+                // Eğer session ID varsa, sadece o session'a ait yoklamaları al
+                let list = allList;
+                if (currentSessionId) {
+                    list = allList.filter(att => att.sessionId === currentSessionId);
+                }
+                
                 callback(list);
             }
         }
@@ -1546,7 +1602,10 @@
                 if (useFirebase && currentSessionId) {
                     database.ref('sessions/' + currentSessionId + '/attendances').remove();
                 } else {
-                    localStorage.removeItem('attendanceList');
+                    // LocalStorage - sadece mevcut session'ı temizle
+                    const allList = JSON.parse(localStorage.getItem('attendanceList') || '[]');
+                    const otherSessions = allList.filter(att => att.sessionId !== currentSessionId);
+                    localStorage.setItem('attendanceList', JSON.stringify(otherSessions));
                 }
                 loadAttendanceList();
             }
